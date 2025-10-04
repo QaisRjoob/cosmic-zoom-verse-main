@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
-import { CheckCircle2, AlertCircle, XCircle, Sparkles } from "lucide-react";
+import { CheckCircle2, AlertCircle, XCircle, Sparkles, RefreshCw, Database } from "lucide-react";
 
 interface Exoplanet {
   id: number;
@@ -104,10 +104,40 @@ export const UniverseExoplanets = () => {
     candidate: false,
     "false-positive": false
   });
+  const [dataSource, setDataSource] = useState<"default" | "user">("default");
+  const [userExoplanets, setUserExoplanets] = useState<Exoplanet[]>([]);
+  const [hasUserData, setHasUserData] = useState(false);
 
-  const confirmedPlanets = allExoplanets.filter(p => p.status === "confirmed");
-  const candidatePlanets = allExoplanets.filter(p => p.status === "candidate");
-  const falsePositives = allExoplanets.filter(p => p.status === "false-positive");
+  // Check for user uploaded CSV data
+  useEffect(() => {
+    const checkUserData = () => {
+      const csvUploaded = localStorage.getItem("csvUploaded");
+      const uploadedData = localStorage.getItem("uploadedExoplanets");
+      
+      if (csvUploaded === "true" && uploadedData) {
+        setHasUserData(true);
+        setDataSource("user");
+        try {
+          const parsedData = JSON.parse(uploadedData);
+          setUserExoplanets(parsedData);
+        } catch (error) {
+          console.error("Error parsing user data:", error);
+        }
+      }
+    };
+
+    checkUserData();
+    
+    // Listen for storage changes (when CSV is uploaded)
+    window.addEventListener('storage', checkUserData);
+    return () => window.removeEventListener('storage', checkUserData);
+  }, []);
+
+  const displayedExoplanets = dataSource === "user" && hasUserData ? userExoplanets : allExoplanets;
+
+  const confirmedPlanets = displayedExoplanets.filter(p => p.status === "confirmed");
+  const candidatePlanets = displayedExoplanets.filter(p => p.status === "candidate");
+  const falsePositives = displayedExoplanets.filter(p => p.status === "false-positive");
 
   const getVisiblePlanets = (planets: Exoplanet[], category: string) => {
     return showAll[category] ? planets : planets.slice(0, 20);
@@ -176,7 +206,7 @@ export const UniverseExoplanets = () => {
 
   return (
     <>
-      {/* Tabs at the top center - below Dashboard cards */}
+      {/* Tabs at the top center */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

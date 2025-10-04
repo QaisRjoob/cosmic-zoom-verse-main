@@ -9,6 +9,8 @@ from typing import Dict, List, Any, Optional
 import pandas as pd
 import io
 from pathlib import Path
+import json
+from datetime import datetime
 
 from models.exoplanet_model import ExoplanetModel
 
@@ -17,6 +19,9 @@ router = APIRouter(prefix="/api", tags=["exoplanet"])
 # Global model instance
 model = ExoplanetModel()
 model_trained = False
+
+# Path for storing planets data
+PLANETS_DATA_PATH = Path("./data/saved_planets.json")
 
 
 # Pydantic schemas for request/response validation
@@ -33,6 +38,37 @@ class PredictionInput(BaseModel):
     koi_smass: Optional[float] = 0
     koi_impact: Optional[float] = 0
     koi_model_snr: Optional[float] = 0
+
+
+class PlanetInput(BaseModel):
+    name: str
+    koi_period: float
+    koi_depth: Optional[float] = 0
+    koi_prad: float
+    koi_teq: Optional[float] = 0
+    koi_insol: Optional[float] = 0
+    koi_model_snr: Optional[float] = 0
+    koi_steff: Optional[float] = 0
+    koi_srad: Optional[float] = 0
+    koi_smass: Optional[float] = 0
+
+
+class SavedPlanet(BaseModel):
+    id: int
+    name: str
+    koi_period: float
+    koi_depth: Optional[float] = 0
+    koi_prad: float
+    koi_teq: Optional[float] = 0
+    koi_insol: Optional[float] = 0
+    koi_model_snr: Optional[float] = 0
+    koi_steff: Optional[float] = 0
+    koi_srad: Optional[float] = 0
+    koi_smass: Optional[float] = 0
+    prediction: str
+    confidence: float
+    probabilities: Dict[str, float]
+    created_at: str
 
 
 class TrainingConfig(BaseModel):
@@ -364,3 +400,172 @@ async def health_check():
         "model_trained": model_trained,
         "version": "1.0.0"
     }
+
+
+# Helper functions for planet data management
+def load_planets_data() -> List[Dict]:
+    """Load planets data from JSON file"""
+    if PLANETS_DATA_PATH.exists():
+        with open(PLANETS_DATA_PATH, 'r') as f:
+            return json.load(f)
+    return []
+
+
+def save_planets_data(planets: List[Dict]):
+    """Save planets data to JSON file"""
+    PLANETS_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(PLANETS_DATA_PATH, 'w') as f:
+        json.dump(planets, f, indent=2)
+
+
+@router.post("/planets/predict-and-save", response_model=SavedPlanet)
+async def predict_and_save_planet(planet: PlanetInput):
+    """
+    Predict exoplanet classification and save to database
+    
+    Args:
+        planet: Planet data including name and features
+        
+    Returns:
+        Saved planet with prediction results
+    """
+    global model, model_trained
+    
+    try:
+        # Load model if not trained
+        if not model_trained:
+            model.load_model()
+            model_trained = True
+        
+        # Prepare features for prediction
+        features = {
+            'koi_period': planet.koi_period,
+            'koi_duration': 0,  # Not provided in frontend
+            'koi_depth': planet.koi_depth,
+            'koi_prad': planet.koi_prad,
+            'koi_teq': planet.koi_teq,
+            'koi_insol': planet.koi_insol,
+            'koi_steff': planet.koi_steff,
+            'koi_slogg': 0,  # Not provided in frontend
+            'koi_srad': planet.koi_srad,
+            'koi_smass': planet.koi_smass,
+            'koi_impact': 0,  # Not provided in frontend
+            'koi_model_snr': planet.koi_model_snr
+        }
+        
+        # Make prediction
+        prediction_result = model.predict(features)
+        
+        # Load existing planets
+        planets = load_planets_data()
+        
+        # Generate new ID
+        new_id = max([p.get('id', 0) for p in planets], default=0) + 1
+        
+        # Create saved planet object
+        saved_planet = {
+            'id': new_id,
+            'name': planet.name,
+            'koi_period': planet.koi_period,
+            'koi_depth': planet.koi_depth,
+            'koi_prad': planet.koi_prad,
+            'koi_teq': planet.koi_teq,
+            'koi_insol': planet.koi_insol,
+            'koi_model_snr': planet.koi_model_snr,
+            'koi_steff': planet.koi_steff,
+            'koi_srad': planet.koi_srad,
+            'koi_smass': planet.koi_smass,
+            'prediction': prediction_result['prediction_label'],
+            'confidence': prediction_result['confidence'],
+            'probabilities': prediction_result['probabilities'],
+            'created_at': datetime.now().isoformat()
+        }
+        
+        # Add to planets list
+        planets.append(saved_planet)
+        
+        # Save to file
+        save_planets_data(planets)
+        
+        return saved_planet
+    
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail="Model not found. Please train the model first."
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/planets")
+async def get_all_planets():
+    """
+    Get all saved planets
+    
+    Returns:
+        List of all saved planets with predictions
+    """
+    try:
+        planets = load_planets_data()
+        return {
+            "planets": planets,
+            "total": len(planets)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/planets/{planet_id}")
+async def get_planet(planet_id: int):
+    """
+    Get a specific planet by ID
+    
+    Args:
+        planet_id: Planet ID
+        
+    Returns:
+        Planet data with prediction
+    """
+    try:
+        planets = load_planets_data()
+        planet = next((p for p in planets if p['id'] == planet_id), None)
+        
+        if not planet:
+            raise HTTPException(status_code=404, detail="Planet not found")
+        
+        return planet
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/planets/{planet_id}")
+async def delete_planet(planet_id: int):
+    """
+    Delete a planet by ID
+    
+    Args:
+        planet_id: Planet ID to delete
+        
+    Returns:
+        Success message
+    """
+    try:
+        planets = load_planets_data()
+        updated_planets = [p for p in planets if p['id'] != planet_id]
+        
+        if len(updated_planets) == len(planets):
+            raise HTTPException(status_code=404, detail="Planet not found")
+        
+        save_planets_data(updated_planets)
+        
+        return {
+            "message": "Planet deleted successfully",
+            "deleted_id": planet_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -12,9 +12,11 @@ import { useToast } from "@/hooks/use-toast";
 interface DataUploadSectionProps {
   onNavigateToTemplate?: () => void;
   compact?: boolean;
+  inline?: boolean;
+  onUploadSuccess?: () => void;
 }
 
-export const DataUploadSection = ({ onNavigateToTemplate, compact = false }: DataUploadSectionProps = {}) => {
+export const DataUploadSection = ({ onNavigateToTemplate, compact = false, inline = false, onUploadSuccess }: DataUploadSectionProps = {}) => {
   const [file, setFile] = useState<File | null>(null);
   const [cleanData, setCleanData] = useState(true);
   const [trainTestSplit, setTrainTestSplit] = useState([80]);
@@ -62,14 +64,63 @@ export const DataUploadSection = ({ onNavigateToTemplate, compact = false }: Dat
 
     setUploading(true);
     try {
-      const info = await exoplanetAPI.uploadDataset(file);
-      setDatasetInfo(info);
+      // Use the new CSV prediction endpoint
+      const result = await exoplanetAPI.predictCSV(file, 10000);
+      
+      setDatasetInfo({
+        total_rows: result.total_count,
+        total_columns: 0,
+        columns: [],
+        missing_values: {},
+        sample_data: []
+      });
       setUploaded(true);
+      
+      // Mark that CSV was uploaded
+      localStorage.setItem("csvUploaded", "true");
+      
+      // Transform API predictions to exoplanet format
+      const userExoplanets = result.predictions.map((pred, index) => {
+        const statusMap: { [key: string]: "confirmed" | "candidate" | "false-positive" } = {
+          "CONFIRMED": "confirmed",
+          "1": "confirmed",
+          "CANDIDATE": "candidate",
+          "2": "candidate",
+          "FALSE POSITIVE": "false-positive",
+          "0": "false-positive"
+        };
+        
+        const status = statusMap[pred.prediction_label] || statusMap[pred.prediction] || "candidate";
+        
+        const colorMap = {
+          "confirmed": "#22c55e",
+          "candidate": "#eab308",
+          "false-positive": "#ef4444"
+        };
+        
+        return {
+          id: index + 1000,
+          name: `KOI-${1000 + index}`,
+          type: status === "confirmed" ? "Super Earth" : status === "candidate" ? "Candidate" : "Unknown",
+          discovered: "2024",
+          status: status,
+          color: colorMap[status],
+          confidence: pred.confidence,
+          probabilities: pred.probabilities
+        };
+      });
+      
+      localStorage.setItem("uploadedExoplanets", JSON.stringify(userExoplanets));
       
       toast({
         title: "Upload Successful!",
-        description: `Uploaded ${info.total_rows} rows with ${info.total_columns} columns`,
+        description: `Processed ${result.total_count} rows. Success: ${result.success_count}, Failed: ${result.failed_count}`,
       });
+      
+      // Navigate to Universe page after upload
+      if (onUploadSuccess) {
+        setTimeout(() => onUploadSuccess(), 1500);
+      }
     } catch (error) {
       toast({
         title: "Upload Failed",
@@ -86,7 +137,7 @@ export const DataUploadSection = ({ onNavigateToTemplate, compact = false }: Dat
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
-      className={`absolute top-24 right-8 z-20 ${compact ? 'w-80' : 'w-96'}`}
+      className={inline ? 'w-full' : `absolute top-24 right-8 z-20 ${compact ? 'w-80' : 'w-96'}`}
     >
       <Card className="bg-card/80 backdrop-blur-lg border-border/50 shadow-2xl">
         <CardHeader className={compact ? 'pb-3' : ''}>

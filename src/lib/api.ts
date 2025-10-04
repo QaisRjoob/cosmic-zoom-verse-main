@@ -3,6 +3,49 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+// KOI Feature Input Interface (from API documentation)
+export interface KOIFeatures {
+  koi_fpflag_nt: number;
+  koi_fpflag_ss: number;
+  koi_fpflag_co: number;
+  koi_fpflag_ec: number;
+  koi_period: number;
+  koi_period_err1: number;
+  koi_period_err2: number;
+  koi_time0bk: number;
+  koi_time0bk_err1: number;
+  koi_time0bk_err2: number;
+  koi_impact: number;
+  koi_impact_err1: number;
+  koi_impact_err2: number;
+  koi_duration: number;
+  koi_duration_err1: number;
+  koi_duration_err2: number;
+  koi_depth: number;
+  koi_depth_err1: number;
+  koi_depth_err2: number;
+  koi_prad: number;
+  koi_prad_err1: number;
+  koi_prad_err2: number;
+  koi_teq: number;
+  koi_insol: number;
+  koi_insol_err1: number;
+  koi_insol_err2: number;
+  koi_model_snr: number;
+  koi_steff: number;
+  koi_steff_err1: number;
+  koi_steff_err2: number;
+  koi_slogg: number;
+  koi_slogg_err1: number;
+  koi_slogg_err2: number;
+  koi_srad: number;
+  koi_srad_err1: number;
+  koi_srad_err2: number;
+  ra: number;
+  dec: number;
+  koi_kepmag: number;
+}
+
 export interface PredictionInput {
   koi_period: number;
   koi_duration: number;
@@ -19,12 +62,56 @@ export interface PredictionInput {
 }
 
 export interface PredictionResponse {
-  prediction: number;
+  prediction: string;
   prediction_label: string;
   confidence: number;
   probabilities: {
     [key: string]: number;
   };
+  model_version: string;
+  timestamp: string;
+}
+
+export interface BatchPredictionResponse {
+  predictions: PredictionResponse[];
+  total_count: number;
+  success_count: number;
+  failed_count: number;
+  processing_time: number;
+  errors?: Array<{
+    row: number;
+    error: string;
+  }>;
+  timestamp: string;
+}
+
+export interface HealthResponse {
+  status: string;
+  model_loaded: boolean;
+  model_version: string;
+  model_type: string;
+  timestamp: string;
+}
+
+export interface ModelInfoResponse {
+  model_type: string;
+  model_version: string;
+  feature_count: number;
+  gpu_accelerated: boolean;
+  training_date: string;
+  accuracy: number;
+}
+
+export interface PlanetData {
+  planet_name: string;
+  koi_fpflag_nt?: number;
+  koi_fpflag_ss?: number;
+  koi_period?: number;
+  koi_prad?: number;
+  koi_teq?: number;
+  description?: string;
+  tags?: string[];
+  [key: string]: any;
 }
 
 export interface TrainingConfig {
@@ -60,34 +147,16 @@ class ExoplanetAPI {
     this.baseUrl = baseUrl;
   }
 
-  // Health check
-  async healthCheck(): Promise<{ status: string; model_trained: boolean }> {
-    const response = await fetch(`${this.baseUrl}/api/health`);
+  // Health check (NEW - from API docs)
+  async healthCheck(): Promise<HealthResponse> {
+    const response = await fetch(`${this.baseUrl}/health`);
     if (!response.ok) throw new Error('API health check failed');
     return response.json();
   }
 
-  // Train model
-  async trainModel(config: TrainingConfig): Promise<MetricsResponse> {
-    const response = await fetch(`${this.baseUrl}/api/train`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(config),
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Training failed');
-    }
-    
-    return response.json();
-  }
-
-  // Single prediction
-  async predict(input: PredictionInput): Promise<PredictionResponse> {
-    const response = await fetch(`${this.baseUrl}/api/predict`, {
+  // Single prediction (UPDATED - from API docs)
+  async predict(input: Partial<KOIFeatures>): Promise<PredictionResponse> {
+    const response = await fetch(`${this.baseUrl}/predict`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -103,19 +172,136 @@ class ExoplanetAPI {
     return response.json();
   }
 
-  // Batch prediction
-  async predictBatch(file: File): Promise<{ predictions: any[]; total_count: number }> {
+  // Batch prediction (UPDATED - from API docs)
+  async predictBatch(features: Partial<KOIFeatures>[]): Promise<BatchPredictionResponse> {
+    const response = await fetch(`${this.baseUrl}/predict/batch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ features }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Batch prediction failed');
+    }
+    
+    return response.json();
+  }
+
+  // CSV file upload & prediction (NEW - from API docs)
+  async predictCSV(file: File, maxRows: number = 10000): Promise<BatchPredictionResponse> {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${this.baseUrl}/api/predict-batch`, {
+    const response = await fetch(`${this.baseUrl}/predict/csv?max_rows=${maxRows}`, {
       method: 'POST',
       body: formData,
     });
     
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.detail || 'Batch prediction failed');
+      throw new Error(error.detail || 'CSV prediction failed');
+    }
+    
+    return response.json();
+  }
+
+  // Get model info (NEW - from API docs)
+  async getModelInfo(): Promise<ModelInfoResponse> {
+    const response = await fetch(`${this.baseUrl}/model/info`);
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch model info');
+    }
+    
+    return response.json();
+  }
+
+  // Get model statistics (NEW - from API docs)
+  async getModelStatistics(): Promise<MetricsResponse> {
+    const response = await fetch(`${this.baseUrl}/model/statistics`);
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch model statistics');
+    }
+    
+    return response.json();
+  }
+
+  // Store planet data (NEW - from API docs)
+  async storePlanet(planetData: PlanetData): Promise<{ message: string; planet_name: string; file_path: string }> {
+    const response = await fetch(`${this.baseUrl}/planets`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(planetData),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to store planet data');
+    }
+    
+    return response.json();
+  }
+
+  // Get all planets (NEW - from API docs)
+  async getAllPlanets(): Promise<{ planets: PlanetData[]; total_count: number }> {
+    const response = await fetch(`${this.baseUrl}/planets`);
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch planets');
+    }
+    
+    return response.json();
+  }
+
+  // Get single planet (NEW - from API docs)
+  async getPlanet(planetName: string): Promise<PlanetData> {
+    const response = await fetch(`${this.baseUrl}/planets/${encodeURIComponent(planetName)}`);
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch planet');
+    }
+    
+    return response.json();
+  }
+
+  // Delete planet (NEW - from API docs)
+  async deletePlanet(planetName: string): Promise<{ message: string; planet_name: string }> {
+    const response = await fetch(`${this.baseUrl}/planets/${encodeURIComponent(planetName)}`, {
+      method: 'DELETE',
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to delete planet');
+    }
+    
+    return response.json();
+  }
+
+  // OLD ENDPOINTS (keeping for backward compatibility)
+  // Train model
+  async trainModel(config: TrainingConfig): Promise<MetricsResponse> {
+    const response = await fetch(`${this.baseUrl}/api/train`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(config),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Training failed');
     }
     
     return response.json();
@@ -158,24 +344,6 @@ class ExoplanetAPI {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || 'Failed to fetch dataset info');
-    }
-    
-    return response.json();
-  }
-
-  // Get model info
-  async getModelInfo(): Promise<{
-    model_type: string;
-    feature_names: string[];
-    label_mapping: { [key: number]: string };
-    n_features: number;
-    is_trained: boolean;
-  }> {
-    const response = await fetch(`${this.baseUrl}/api/model-info`);
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to fetch model info');
     }
     
     return response.json();

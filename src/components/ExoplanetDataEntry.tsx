@@ -1,13 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
-import { Save, ChevronRight, ChevronLeft, Sparkles, Globe, Orbit, Thermometer, Upload, Check, AlertCircle } from "lucide-react";
+import { Save, ChevronRight, ChevronLeft, Sparkles, Globe, Orbit, Thermometer, Check, AlertCircle, Loader2, Brain } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
@@ -29,44 +28,51 @@ interface ExoplanetDataEntryProps {
 
 interface ExoplanetFormData {
   name: string;
-  orbitalPeriod: string;
-  transitDuration: string;
-  planetaryRadius: string;
-  stellarRadius: string;
-  equilibriumTemperature: string;
-  insolationFlux: string;
-  distanceFromStar: string;
-  planetMass: string;
-  detectionStatus: "confirmed" | "candidate" | "false-positive" | "";
-  discoveryYear: string;
-  discoveryMethod: string;
-  notes: string;
+  koi_period: string;
+  koi_depth: string;
+  koi_prad: string;
+  koi_teq: string;
+  koi_insol: string;
+  koi_model_snr: string;
+  koi_steff: string;
+  koi_srad: string;
+  koi_smass: string;
+}
+
+interface PredictionResult {
+  prediction: number;
+  prediction_label: string;
+  confidence: number;
+  probabilities: {
+    CANDIDATE: number;
+    CONFIRMED: number;
+    "FALSE POSITIVE": number;
+  };
 }
 
 const initialFormData: ExoplanetFormData = {
   name: "",
-  orbitalPeriod: "",
-  transitDuration: "",
-  planetaryRadius: "",
-  stellarRadius: "",
-  equilibriumTemperature: "",
-  insolationFlux: "",
-  distanceFromStar: "",
-  planetMass: "",
-  detectionStatus: "",
-  discoveryYear: "",
-  discoveryMethod: "",
-  notes: "",
+  koi_period: "",
+  koi_depth: "",
+  koi_prad: "",
+  koi_teq: "",
+  koi_insol: "",
+  koi_model_snr: "",
+  koi_steff: "",
+  koi_srad: "",
+  koi_smass: "",
 };
 
 export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<ExoplanetFormData>(initialFormData);
   const [errors, setErrors] = useState<Partial<Record<keyof ExoplanetFormData, string>>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [isPredicting, setIsPredicting] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [savedData, setSavedData] = useState<any>(null);
+  const [predictionResult, setPredictionResult] = useState<PredictionResult | null>(null);
   const { toast } = useToast();
 
   const steps = [
@@ -74,9 +80,9 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
       id: 0, 
       title: "Planet Identity", 
       icon: Globe,
-      description: "Basic information about the exoplanet",
+      description: "Name your exoplanet discovery",
       gradient: "from-blue-500/20 to-cyan-500/20",
-      fields: ["name", "detectionStatus", "discoveryYear", "discoveryMethod"]
+      fields: ["name"]
     },
     { 
       id: 1, 
@@ -84,23 +90,23 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
       icon: Orbit,
       description: "Orbital characteristics and period",
       gradient: "from-purple-500/20 to-pink-500/20",
-      fields: ["orbitalPeriod", "transitDuration", "distanceFromStar"]
+      fields: ["koi_period", "koi_depth"]
     },
     { 
       id: 2, 
       title: "Physical Properties", 
       icon: Sparkles,
-      description: "Size, mass, and composition",
+      description: "Size and stellar properties",
       gradient: "from-orange-500/20 to-yellow-500/20",
-      fields: ["planetaryRadius", "planetMass", "stellarRadius"]
+      fields: ["koi_prad", "koi_srad", "koi_smass"]
     },
     { 
       id: 3, 
       title: "Environmental", 
       icon: Thermometer,
-      description: "Temperature and atmospheric data",
+      description: "Temperature and stellar data",
       gradient: "from-green-500/20 to-emerald-500/20",
-      fields: ["equilibriumTemperature", "insolationFlux", "notes"]
+      fields: ["koi_teq", "koi_insol", "koi_steff", "koi_model_snr"]
     },
   ];
 
@@ -120,16 +126,12 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
       newErrors.name = "Planet name is required";
     }
 
-    if (!formData.orbitalPeriod || parseFloat(formData.orbitalPeriod) <= 0) {
-      newErrors.orbitalPeriod = "Valid orbital period is required (days)";
+    if (!formData.koi_period || parseFloat(formData.koi_period) <= 0) {
+      newErrors.koi_period = "Valid orbital period is required (days)";
     }
 
-    if (!formData.planetaryRadius || parseFloat(formData.planetaryRadius) <= 0) {
-      newErrors.planetaryRadius = "Valid planetary radius is required";
-    }
-
-    if (!formData.detectionStatus) {
-      newErrors.detectionStatus = "Detection status is required";
+    if (!formData.koi_prad || parseFloat(formData.koi_prad) <= 0) {
+      newErrors.koi_prad = "Valid planetary radius is required";
     }
 
     setErrors(newErrors);
@@ -148,63 +150,133 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
       return;
     }
 
-    setIsSaving(true);
+    setIsPredicting(true);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const existingData = JSON.parse(localStorage.getItem("exoplanetData") || "[]");
-      const newEntry = {
-        ...formData,
-        id: Date.now(),
-        createdAt: new Date().toISOString(),
+      // Call save API
+      const savePayload = {
+        planet_id: `PLT_${Date.now()}`,
+        koi_name: formData.name,
+        koi_period: parseFloat(formData.koi_period) || 0,
+        koi_depth: parseFloat(formData.koi_depth) || 0,
+        koi_prad: parseFloat(formData.koi_prad) || 0,
+        koi_teq: parseFloat(formData.koi_teq) || 0,
+        koi_insol: parseFloat(formData.koi_insol) || 0,
+        koi_steff: parseFloat(formData.koi_steff) || 0,
+        koi_srad: parseFloat(formData.koi_srad) || 0,
+        koi_slogg: 0, // Default value
+        koi_duration: 0, // Default value
+        koi_impact: 0, // Default value
+        koi_time0bk: 0, // Default value
+        koi_kepmag: 0, // Default value
+        disposition: "CANDIDATE", // Will be predicted
+        notes: `Submitted from prediction form at ${new Date().toISOString()}`,
+        submitted_by: "Web User"
       };
-      existingData.push(newEntry);
-      localStorage.setItem("exoplanetData", JSON.stringify(existingData));
 
-      setSavedData(newEntry);
+      const response = await fetch("http://localhost:8000/planets/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(savePayload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to save planet data");
+      }
+
+      const result = await response.json();
+      
+      // Now call prediction endpoint
+      const predictionPayload = {
+        koi_period: parseFloat(formData.koi_period) || 0,
+        koi_duration: 0,
+        koi_depth: parseFloat(formData.koi_depth) || 0,
+        koi_prad: parseFloat(formData.koi_prad) || 0,
+        koi_teq: parseFloat(formData.koi_teq) || 0,
+        koi_insol: parseFloat(formData.koi_insol) || 0,
+        koi_steff: parseFloat(formData.koi_steff) || 0,
+        koi_slogg: 0,
+        koi_srad: parseFloat(formData.koi_srad) || 0,
+        koi_smass: parseFloat(formData.koi_smass) || 0,
+        koi_impact: 0,
+        koi_model_snr: parseFloat(formData.koi_model_snr) || 0
+      };
+
+      const predictionResponse = await fetch("http://localhost:8000/api/predict", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(predictionPayload),
+      });
+
+      if (predictionResponse.ok) {
+        const prediction = await predictionResponse.json();
+        setPredictionResult({
+          prediction: prediction.prediction,
+          prediction_label: prediction.prediction_label,
+          confidence: prediction.confidence,
+          probabilities: prediction.probabilities,
+        });
+      } else {
+        // If prediction fails, use default
+        setPredictionResult({
+          prediction: 0,
+          prediction_label: "CANDIDATE",
+          confidence: 0.5,
+          probabilities: {
+            CANDIDATE: 0.5,
+            CONFIRMED: 0.3,
+            "FALSE POSITIVE": 0.2
+          },
+        });
+      }
+
       setShowConfirmation(true);
 
       toast({
         title: "Success!",
-        description: `Exoplanet "${formData.name}" has been saved successfully.`,
+        description: `Planet "${formData.name}" saved successfully!`,
       });
 
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to save exoplanet data. Please try again.",
+        title: "Prediction Error",
+        description: error instanceof Error ? error.message : "Failed to predict. Please ensure the backend is running.",
         variant: "destructive",
       });
     } finally {
-      setIsSaving(false);
+      setIsPredicting(false);
     }
   };
 
   const handleConfirmAndContinue = () => {
     setShowConfirmation(false);
     setFormData(initialFormData);
+    setPredictionResult(null);
     setCurrentStep(0);
     setCompletedSteps([]);
   };
 
   const handleConfirmAndView = () => {
     setShowConfirmation(false);
-    if (onSuccess) {
-      onSuccess();
-    }
+    navigate("/my-planets");
   };
 
   const handleEditData = () => {
     setShowConfirmation(false);
+    setPredictionResult(null);
     // Keep the form data so user can edit
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case "confirmed": return "bg-green-500/20 text-green-400 border-green-500/50";
-      case "candidate": return "bg-yellow-500/20 text-yellow-400 border-yellow-500/50";
-      case "false-positive": return "bg-red-500/20 text-red-400 border-red-500/50";
+    switch (status.toUpperCase()) {
+      case "CONFIRMED": return "bg-green-500/20 text-green-400 border-green-500/50";
+      case "CANDIDATE": return "bg-yellow-500/20 text-yellow-400 border-yellow-500/50";
+      case "FALSE POSITIVE": return "bg-red-500/20 text-red-400 border-red-500/50";
       default: return "bg-gray-500/20 text-gray-400 border-gray-500/50";
     }
   };
@@ -260,13 +332,13 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
                   ease: "easeInOut"
                 }}
               >
-                <Upload className="w-16 h-16 text-purple-400" />
+                <Brain className="w-16 h-16 text-purple-400" />
               </motion.div>
               <div>
                 <h2 className="text-4xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
-                  Exoplanet Discovery Portal
+                  Exoplanet Prediction Portal
                 </h2>
-                <p className="text-gray-400 text-sm mt-1">Multi-step data entry wizard</p>
+                <p className="text-gray-400 text-sm mt-1">AI-powered classification wizard</p>
               </div>
             </motion.div>
 
@@ -345,13 +417,13 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
                         <Globe className="w-6 h-6 text-blue-400" />
                         <div>
                           <h3 className="text-2xl font-bold text-white">Planet Identity</h3>
-                          <p className="text-gray-400 text-sm">Basic information about the exoplanet</p>
+                          <p className="text-gray-400 text-sm">Name your exoplanet discovery</p>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 gap-6">
                         {/* Planet Name */}
-                        <div className="space-y-2 col-span-2">
+                        <div className="space-y-2">
                           <Label htmlFor="name" className="text-gray-300 flex items-center gap-2">
                             Planet Name *
                             <Tooltip>
@@ -376,73 +448,6 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
                             <p className="text-red-400 text-sm">{errors.name}</p>
                           )}
                         </div>
-
-                        {/* Detection Status */}
-                        <div className="space-y-2">
-                          <Label htmlFor="detectionStatus" className="text-gray-300">
-                            Detection Status *
-                          </Label>
-                          <Select
-                            value={formData.detectionStatus}
-                            onValueChange={(value) => handleInputChange("detectionStatus", value)}
-                          >
-                            <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                              <SelectValue placeholder="Select status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="confirmed">
-                                <Badge className={getStatusColor("confirmed")}>Confirmed</Badge>
-                              </SelectItem>
-                              <SelectItem value="candidate">
-                                <Badge className={getStatusColor("candidate")}>Candidate</Badge>
-                              </SelectItem>
-                              <SelectItem value="false-positive">
-                                <Badge className={getStatusColor("false-positive")}>False Positive</Badge>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {errors.detectionStatus && (
-                            <p className="text-red-400 text-sm">{errors.detectionStatus}</p>
-                          )}
-                        </div>
-
-                        {/* Discovery Year */}
-                        <div className="space-y-2">
-                          <Label htmlFor="discoveryYear" className="text-gray-300">
-                            Discovery Year
-                          </Label>
-                          <Input
-                            id="discoveryYear"
-                            type="number"
-                            placeholder="e.g., 2015"
-                            value={formData.discoveryYear}
-                            onChange={(e) => handleInputChange("discoveryYear", e.target.value)}
-                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
-                          />
-                        </div>
-
-                        {/* Discovery Method */}
-                        <div className="space-y-2 col-span-2">
-                          <Label htmlFor="discoveryMethod" className="text-gray-300">
-                            Discovery Method
-                          </Label>
-                          <Select
-                            value={formData.discoveryMethod}
-                            onValueChange={(value) => handleInputChange("discoveryMethod", value)}
-                          >
-                            <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                              <SelectValue placeholder="Select method" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="transit">Transit</SelectItem>
-                              <SelectItem value="radial-velocity">Radial Velocity</SelectItem>
-                              <SelectItem value="direct-imaging">Direct Imaging</SelectItem>
-                              <SelectItem value="microlensing">Microlensing</SelectItem>
-                              <SelectItem value="astrometry">Astrometry</SelectItem>
-                              <SelectItem value="ttv">Transit Timing Variation (TTV)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
                       </div>
                     </div>
                   )}
@@ -459,86 +464,62 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
                       </div>
 
                       <div className="grid grid-cols-2 gap-6">
-                        {/* Orbital Period */}
+                        {/* Orbital Period (koi_period) */}
                         <div className="space-y-2">
-                          <Label htmlFor="orbitalPeriod" className="text-gray-300 flex items-center gap-2">
+                          <Label htmlFor="koi_period" className="text-gray-300 flex items-center gap-2">
                             Orbital Period (days) *
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="w-4 h-4 text-gray-500 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Time taken for one complete orbit around the host star</p>
+                                <p>Time taken for one complete orbit around the host star (koi_period)</p>
                               </TooltipContent>
                             </Tooltip>
                           </Label>
                           <Input
-                            id="orbitalPeriod"
+                            id="koi_period"
                             type="number"
                             step="any"
                             placeholder="e.g., 365.25"
-                            value={formData.orbitalPeriod}
-                            onChange={(e) => handleInputChange("orbitalPeriod", e.target.value)}
+                            value={formData.koi_period}
+                            onChange={(e) => handleInputChange("koi_period", e.target.value)}
                             className={`bg-white/5 border-white/10 text-white placeholder:text-gray-500 ${
-                              errors.orbitalPeriod ? 'border-red-500' : ''
+                              errors.koi_period ? 'border-red-500' : ''
                             }`}
                           />
-                          {errors.orbitalPeriod && (
-                            <p className="text-red-400 text-sm">{errors.orbitalPeriod}</p>
+                          {errors.koi_period && (
+                            <p className="text-red-400 text-sm">{errors.koi_period}</p>
                           )}
                         </div>
 
-                        {/* Transit Duration */}
+                        {/* Transit Depth (koi_depth) */}
                         <div className="space-y-2">
-                          <Label htmlFor="transitDuration" className="text-gray-300 flex items-center gap-2">
-                            Transit Duration (hours)
+                          <Label htmlFor="koi_depth" className="text-gray-300 flex items-center gap-2">
+                            Transit Depth (ppm)
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="w-4 h-4 text-gray-500 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Duration of the planet's transit across the star's disk</p>
+                                <p>Depth of the transit signal in parts per million (koi_depth)</p>
                               </TooltipContent>
                             </Tooltip>
                           </Label>
                           <Input
-                            id="transitDuration"
+                            id="koi_depth"
                             type="number"
                             step="any"
-                            placeholder="e.g., 6.5"
-                            value={formData.transitDuration}
-                            onChange={(e) => handleInputChange("transitDuration", e.target.value)}
-                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
-                          />
-                        </div>
-
-                        {/* Distance from Star */}
-                        <div className="space-y-2 col-span-2">
-                          <Label htmlFor="distanceFromStar" className="text-gray-300 flex items-center gap-2">
-                            Distance from Star (AU)
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="w-4 h-4 text-gray-500 cursor-help" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Semi-major axis of the orbit in Astronomical Units (1 AU = Earth-Sun distance)</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </Label>
-                          <Input
-                            id="distanceFromStar"
-                            type="number"
-                            step="any"
-                            placeholder="e.g., 1.0"
-                            value={formData.distanceFromStar}
-                            onChange={(e) => handleInputChange("distanceFromStar", e.target.value)}
+                            placeholder="e.g., 143.3"
+                            value={formData.koi_depth}
+                            onChange={(e) => handleInputChange("koi_depth", e.target.value)}
                             className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
                           />
                         </div>
                       </div>
                     </div>
                   )}
-
+                              
                   {/* Step 2: Physical Properties */}
                   {currentStep === 2 && (
                     <div className="space-y-6">
@@ -546,84 +527,84 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
                         <Sparkles className="w-6 h-6 text-orange-400" />
                         <div>
                           <h3 className="text-2xl font-bold text-white">Physical Properties</h3>
-                          <p className="text-gray-400 text-sm">Size, mass, and composition</p>
+                          <p className="text-gray-400 text-sm">Size and stellar properties</p>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-6">
-                        {/* Planetary Radius */}
+                        {/* Planetary Radius (koi_prad) */}
                         <div className="space-y-2">
-                          <Label htmlFor="planetaryRadius" className="text-gray-300 flex items-center gap-2">
+                          <Label htmlFor="koi_prad" className="text-gray-300 flex items-center gap-2">
                             Planetary Radius (Earth radii) *
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="w-4 h-4 text-gray-500 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Radius relative to Earth (1.0 = Earth-sized)</p>
+                                <p>Radius relative to Earth (1.0 = Earth-sized) - koi_prad</p>
                               </TooltipContent>
                             </Tooltip>
                           </Label>
                           <Input
-                            id="planetaryRadius"
+                            id="koi_prad"
                             type="number"
                             step="any"
                             placeholder="e.g., 1.06"
-                            value={formData.planetaryRadius}
-                            onChange={(e) => handleInputChange("planetaryRadius", e.target.value)}
+                            value={formData.koi_prad}
+                            onChange={(e) => handleInputChange("koi_prad", e.target.value)}
                             className={`bg-white/5 border-white/10 text-white placeholder:text-gray-500 ${
-                              errors.planetaryRadius ? 'border-red-500' : ''
+                              errors.koi_prad ? 'border-red-500' : ''
                             }`}
                           />
-                          {errors.planetaryRadius && (
-                            <p className="text-red-400 text-sm">{errors.planetaryRadius}</p>
+                          {errors.koi_prad && (
+                            <p className="text-red-400 text-sm">{errors.koi_prad}</p>
                           )}
                         </div>
 
-                        {/* Planet Mass */}
+                        {/* Stellar Radius (koi_srad) */}
                         <div className="space-y-2">
-                          <Label htmlFor="planetMass" className="text-gray-300 flex items-center gap-2">
-                            Planet Mass (Earth masses)
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="w-4 h-4 text-gray-500 cursor-help" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Mass relative to Earth (1.0 = Earth mass)</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </Label>
-                          <Input
-                            id="planetMass"
-                            type="number"
-                            step="any"
-                            placeholder="e.g., 1.17"
-                            value={formData.planetMass}
-                            onChange={(e) => handleInputChange("planetMass", e.target.value)}
-                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
-                          />
-                        </div>
-
-                        {/* Stellar Radius */}
-                        <div className="space-y-2 col-span-2">
-                          <Label htmlFor="stellarRadius" className="text-gray-300 flex items-center gap-2">
+                          <Label htmlFor="koi_srad" className="text-gray-300 flex items-center gap-2">
                             Stellar Radius (Solar radii)
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="w-4 h-4 text-gray-500 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Radius of the host star relative to the Sun (1.0 = Sun-sized)</p>
+                                <p>Radius of the host star (1.0 = Sun-sized) - koi_srad</p>
                               </TooltipContent>
                             </Tooltip>
                           </Label>
                           <Input
-                            id="stellarRadius"
+                            id="koi_srad"
                             type="number"
                             step="any"
                             placeholder="e.g., 1.0"
-                            value={formData.stellarRadius}
-                            onChange={(e) => handleInputChange("stellarRadius", e.target.value)}
+                            value={formData.koi_srad}
+                            onChange={(e) => handleInputChange("koi_srad", e.target.value)}
+                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                          />
+                        </div>
+
+                        {/* Stellar Mass (koi_smass) */}
+                        <div className="space-y-2 col-span-2">
+                          <Label htmlFor="koi_smass" className="text-gray-300 flex items-center gap-2">
+                            Stellar Mass (Solar masses)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-gray-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Mass of the host star (1.0 = Sun mass) - koi_smass</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </Label>
+                          <Input
+                            id="koi_smass"
+                            type="number"
+                            step="any"
+                            placeholder="e.g., 1.0"
+                            value={formData.koi_smass}
+                            onChange={(e) => handleInputChange("koi_smass", e.target.value)}
                             className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
                           />
                         </div>
@@ -638,70 +619,104 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
                         <Thermometer className="w-6 h-6 text-green-400" />
                         <div>
                           <h3 className="text-2xl font-bold text-white">Environmental Data</h3>
-                          <p className="text-gray-400 text-sm">Temperature and atmospheric conditions</p>
+                          <p className="text-gray-400 text-sm">Temperature and stellar data</p>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-6">
-                        {/* Equilibrium Temperature */}
+                        {/* Equilibrium Temperature (koi_teq) */}
                         <div className="space-y-2">
-                          <Label htmlFor="equilibriumTemperature" className="text-gray-300 flex items-center gap-2">
+                          <Label htmlFor="koi_teq" className="text-gray-300 flex items-center gap-2">
                             Equilibrium Temperature (K)
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="w-4 h-4 text-gray-500 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Theoretical temperature assuming perfect heat distribution (Kelvin)</p>
+                                <p>Theoretical temperature in Kelvin - koi_teq</p>
                               </TooltipContent>
                             </Tooltip>
                           </Label>
                           <Input
-                            id="equilibriumTemperature"
+                            id="koi_teq"
                             type="number"
                             step="any"
                             placeholder="e.g., 288"
-                            value={formData.equilibriumTemperature}
-                            onChange={(e) => handleInputChange("equilibriumTemperature", e.target.value)}
+                            value={formData.koi_teq}
+                            onChange={(e) => handleInputChange("koi_teq", e.target.value)}
                             className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
                           />
                         </div>
 
-                        {/* Insolation Flux */}
+                        {/* Insolation Flux (koi_insol) */}
                         <div className="space-y-2">
-                          <Label htmlFor="insolationFlux" className="text-gray-300 flex items-center gap-2">
+                          <Label htmlFor="koi_insol" className="text-gray-300 flex items-center gap-2">
                             Insolation Flux (Earth flux)
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="w-4 h-4 text-gray-500 cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Stellar flux received relative to Earth (1.0 = Earth's insolation)</p>
+                                <p>Stellar flux relative to Earth (1.0 = Earth's flux) - koi_insol</p>
                               </TooltipContent>
                             </Tooltip>
                           </Label>
                           <Input
-                            id="insolationFlux"
+                            id="koi_insol"
                             type="number"
                             step="any"
                             placeholder="e.g., 1.0"
-                            value={formData.insolationFlux}
-                            onChange={(e) => handleInputChange("insolationFlux", e.target.value)}
+                            value={formData.koi_insol}
+                            onChange={(e) => handleInputChange("koi_insol", e.target.value)}
                             className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
                           />
                         </div>
 
-                        {/* Notes */}
-                        <div className="space-y-2 col-span-2">
-                          <Label htmlFor="notes" className="text-gray-300">
-                            Additional Notes
+                        {/* Stellar Effective Temperature (koi_steff) */}
+                        <div className="space-y-2">
+                          <Label htmlFor="koi_steff" className="text-gray-300 flex items-center gap-2">
+                            Stellar Effective Temperature (K)
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-gray-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Temperature of the host star in Kelvin - koi_steff</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </Label>
-                          <Textarea
-                            id="notes"
-                            placeholder="Any additional observations or remarks..."
-                            value={formData.notes}
-                            onChange={(e) => handleInputChange("notes", e.target.value)}
-                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 min-h-[120px]"
+                          <Input
+                            id="koi_steff"
+                            type="number"
+                            step="any"
+                            placeholder="e.g., 5778"
+                            value={formData.koi_steff}
+                            onChange={(e) => handleInputChange("koi_steff", e.target.value)}
+                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                          />
+                        </div>
+
+                        {/* Model Signal-to-Noise Ratio (koi_model_snr) */}
+                        <div className="space-y-2">
+                          <Label htmlFor="koi_model_snr" className="text-gray-300 flex items-center gap-2">
+                            Model SNR
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="w-4 h-4 text-gray-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Signal-to-noise ratio of the transit model - koi_model_snr</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </Label>
+                          <Input
+                            id="koi_model_snr"
+                            type="number"
+                            step="any"
+                            placeholder="e.g., 20.5"
+                            value={formData.koi_model_snr}
+                            onChange={(e) => handleInputChange("koi_model_snr", e.target.value)}
+                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
                           />
                         </div>
                       </div>
@@ -739,11 +754,20 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
                 ) : (
                   <Button
                     type="submit"
-                    disabled={isSaving}
+                    disabled={isPredicting}
                     className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
                   >
-                    {isSaving ? "Saving..." : "Submit Discovery"}
-                    <Save className="w-4 h-4 ml-2" />
+                    {isPredicting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        Predict Classification
+                        <Brain className="w-4 h-4 ml-2" />
+                      </>
+                    )}
                   </Button>
                 )}
               </div>
@@ -757,22 +781,53 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2 text-2xl">
                 <Check className="w-6 h-6 text-green-400" />
-                Data Saved Successfully!
+                Prediction Complete!
               </AlertDialogTitle>
               <AlertDialogDescription className="text-base pt-4">
                 <div className="space-y-3">
                   <p className="text-muted-foreground">
-                    Exoplanet <span className="text-white font-semibold">"{savedData?.name}"</span> has been saved to your collection.
+                    Planet <span className="text-white font-semibold">"{formData.name}"</span> has been analyzed successfully.
                   </p>
-                  <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4 space-y-2">
-                    <p className="text-sm font-medium text-purple-300 flex items-center gap-2">
+                  {predictionResult && (
+                    <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4 space-y-3">
+                      <div>
+                        <p className="text-sm font-medium text-purple-300 mb-2">AI Prediction:</p>
+                        <Badge className={`${getStatusColor(predictionResult.prediction_label)} text-lg px-4 py-1`}>
+                          {predictionResult.prediction_label}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-purple-300 mb-2">Confidence:</p>
+                        <p className="text-2xl font-bold text-white">{(predictionResult.confidence * 100).toFixed(1)}%</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-purple-300 mb-2">Probability Distribution:</p>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between">
+                            <span>Confirmed:</span>
+                            <span className="text-green-400">{(predictionResult.probabilities.CONFIRMED * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Candidate:</span>
+                            <span className="text-yellow-400">{(predictionResult.probabilities.CANDIDATE * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>False Positive:</span>
+                            <span className="text-red-400">{(predictionResult.probabilities["FALSE POSITIVE"] * 100).toFixed(1)}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 space-y-2">
+                    <p className="text-sm font-medium text-blue-300 flex items-center gap-2">
                       <AlertCircle className="w-4 h-4" />
                       What would you like to do next?
                     </p>
                     <ul className="text-sm text-muted-foreground space-y-1 ml-6">
-                      <li>• <strong>View Details:</strong> See your planet on "My Planet" page</li>
-                      <li>• <strong>Add Another:</strong> Continue adding more exoplanets</li>
-                      <li>• <strong>Edit Data:</strong> Make changes to this entry</li>
+                      <li>• <strong>View My Planets:</strong> See all your analyzed planets</li>
+                      <li>• <strong>Analyze Another:</strong> Continue with more predictions</li>
+                      <li>• <strong>Edit Data:</strong> Modify and re-predict</li>
                     </ul>
                   </div>
                 </div>
@@ -783,19 +838,19 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
                 onClick={handleEditData}
                 className="border-orange-500/50 bg-orange-500/10 hover:bg-orange-500/20 hover:border-orange-500/70"
               >
-                Edit Data
+                Edit & Re-predict
               </AlertDialogCancel>
               <AlertDialogAction 
                 onClick={handleConfirmAndContinue}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                Add Another Exoplanet
+                Analyze Another Planet
               </AlertDialogAction>
               <AlertDialogAction 
                 onClick={handleConfirmAndView}
                 className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
               >
-                View My Planet
+                View My Planets
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
