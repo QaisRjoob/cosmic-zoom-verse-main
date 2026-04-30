@@ -17,25 +17,19 @@ import {
 
 interface SavedPlanet {
   planet_id: string;
-  koi_name: string;
-  koi_period: number;
-  koi_time0bk?: number;
-  koi_impact?: number;
-  koi_duration?: number;
-  koi_depth: number;
-  koi_prad: number;
-  koi_teq: number;
-  koi_insol: number;
-  koi_steff: number;
-  koi_slogg?: number;
-  koi_srad: number;
-  koi_kepmag?: number;
+  planet_name?: string;
+  koi_name?: string;
+  koi_period?: number;
+  koi_depth?: number;
+  koi_prad?: number;
+  koi_teq?: number;
+  koi_insol?: number;
+  koi_steff?: number;
+  koi_srad?: number;
   koi_model_snr?: number;
   disposition: string;
-  notes?: string;
-  submitted_by?: string;
+  prediction_confidence?: number;
   submitted_at: string;
-  additional_features?: any;
 }
 
 export const MyPlanets = () => {
@@ -54,13 +48,12 @@ export const MyPlanets = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch("http://localhost:8000/planets");
+      const response = await fetch("http://localhost:8000/planets/list");
       if (!response.ok) {
         throw new Error("Failed to fetch planets");
       }
       const data = await response.json();
-      // The API returns an array of planets directly or in a data property
-      const planetsData = Array.isArray(data) ? data : (data.planets || data.data || []);
+      const planetsData = data.planets || [];
       setPlanets(planetsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load planets");
@@ -198,7 +191,7 @@ export const MyPlanets = () => {
                       <div className="flex-1">
                         <CardTitle className="text-xl text-white mb-2 flex items-center gap-2">
                           <Sparkles className="w-5 h-5 text-purple-400" />
-                          <span className="truncate">{planet.koi_name}</span>
+                          <span className="truncate">{planet.planet_name || planet.koi_name || planet.planet_id}</span>
                         </CardTitle>
                         <div className="flex flex-col gap-2">
                           <Badge className={getStatusColor(planet.disposition)}>
@@ -282,7 +275,7 @@ export const MyPlanets = () => {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl flex items-center gap-2">
               <Globe className="w-6 h-6 text-purple-400" />
-              {selectedPlanet?.koi_name}
+              {selectedPlanet?.planet_name || selectedPlanet?.koi_name || selectedPlanet?.planet_id}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-base pt-4">
               {selectedPlanet && (
@@ -300,7 +293,7 @@ export const MyPlanets = () => {
                     </div>
                     <div className="text-sm text-gray-400">
                       <div>Planet ID: <span className="text-white">{selectedPlanet.planet_id}</span></div>
-                      <div>KOI Name: <span className="text-white">{selectedPlanet.koi_name}</span></div>
+                      <div>Name: <span className="text-white">{selectedPlanet.planet_name || selectedPlanet.koi_name || "—"}</span></div>
                     </div>
                   </div>
 
@@ -433,17 +426,19 @@ export const MyPlanets = () => {
                   {/* Metadata */}
                   <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
                     <h3 className="text-lg font-semibold text-purple-300 mb-3">
-                      Observation Details
+                      Prediction Details
                     </h3>
                     <div className="space-y-3 text-sm">
-                      {selectedPlanet.submitted_by && (
+                      {selectedPlanet.prediction_confidence !== undefined && (
                         <div>
-                          <p className="text-gray-400">Submitted By</p>
-                          <p className="text-white font-medium">{selectedPlanet.submitted_by}</p>
+                          <p className="text-gray-400">Confidence</p>
+                          <p className="text-white font-medium">
+                            {(selectedPlanet.prediction_confidence * 100).toFixed(1)}%
+                          </p>
                         </div>
                       )}
                       <div>
-                        <p className="text-gray-400">Submission Date & Time</p>
+                        <p className="text-gray-400">Saved On</p>
                         <p className="text-white font-medium">
                           {new Date(selectedPlanet.submitted_at).toLocaleString('en-US', {
                             dateStyle: 'full',
@@ -451,14 +446,6 @@ export const MyPlanets = () => {
                           })}
                         </p>
                       </div>
-                      {selectedPlanet.notes && (
-                        <div>
-                          <p className="text-gray-400">Notes</p>
-                          <p className="text-white bg-black/20 p-3 rounded mt-1">
-                            {selectedPlanet.notes}
-                          </p>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -497,7 +484,7 @@ export const MyPlanets = () => {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteConfirm && deletePlanet(deleteConfirm)}
+              onClick={() => deleteConfirm !== null && deletePlanet(deleteConfirm as string)}
               className="bg-red-600 hover:bg-red-700"
             >
               Delete Permanently

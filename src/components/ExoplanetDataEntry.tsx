@@ -43,11 +43,7 @@ interface PredictionResult {
   prediction: number;
   prediction_label: string;
   confidence: number;
-  probabilities: {
-    CANDIDATE: number;
-    CONFIRMED: number;
-    "FALSE POSITIVE": number;
-  };
+  probabilities: Record<string, number>;
 }
 
 const initialFormData: ExoplanetFormData = {
@@ -153,10 +149,9 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
     setIsPredicting(true);
 
     try {
-      // Call save API
-      const savePayload = {
-        planet_id: `PLT_${Date.now()}`,
-        koi_name: formData.name,
+      // Single call: predict + save in one round-trip
+      const payload = {
+        planet_name: formData.name,
         koi_period: parseFloat(formData.koi_period) || 0,
         koi_depth: parseFloat(formData.koi_depth) || 0,
         koi_prad: parseFloat(formData.koi_prad) || 0,
@@ -164,76 +159,29 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
         koi_insol: parseFloat(formData.koi_insol) || 0,
         koi_steff: parseFloat(formData.koi_steff) || 0,
         koi_srad: parseFloat(formData.koi_srad) || 0,
-        koi_slogg: 0, // Default value
-        koi_duration: 0, // Default value
-        koi_impact: 0, // Default value
-        koi_time0bk: 0, // Default value
-        koi_kepmag: 0, // Default value
-        disposition: "CANDIDATE", // Will be predicted
-        notes: `Submitted from prediction form at ${new Date().toISOString()}`,
-        submitted_by: "Web User"
+        koi_smass: parseFloat(formData.koi_smass) || 0,
+        koi_model_snr: parseFloat(formData.koi_model_snr) || 0,
       };
 
-      const response = await fetch("http://localhost:8000/planets/save", {
+      const response = await fetch("http://localhost:8000/planets/predict-and-save", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(savePayload),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || "Failed to save planet data");
+        throw new Error(errorData.detail || "Failed to save and predict planet data");
       }
 
       const result = await response.json();
-      
-      // Now call prediction endpoint
-      const predictionPayload = {
-        koi_period: parseFloat(formData.koi_period) || 0,
-        koi_duration: 0,
-        koi_depth: parseFloat(formData.koi_depth) || 0,
-        koi_prad: parseFloat(formData.koi_prad) || 0,
-        koi_teq: parseFloat(formData.koi_teq) || 0,
-        koi_insol: parseFloat(formData.koi_insol) || 0,
-        koi_steff: parseFloat(formData.koi_steff) || 0,
-        koi_slogg: 0,
-        koi_srad: parseFloat(formData.koi_srad) || 0,
-        koi_smass: parseFloat(formData.koi_smass) || 0,
-        koi_impact: 0,
-        koi_model_snr: parseFloat(formData.koi_model_snr) || 0
-      };
 
-      const predictionResponse = await fetch("http://localhost:8000/api/predict", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(predictionPayload),
+      setPredictionResult({
+        prediction: result.prediction,
+        prediction_label: result.prediction,
+        confidence: result.confidence,
+        probabilities: result.probabilities,
       });
-
-      if (predictionResponse.ok) {
-        const prediction = await predictionResponse.json();
-        setPredictionResult({
-          prediction: prediction.prediction,
-          prediction_label: prediction.prediction_label,
-          confidence: prediction.confidence,
-          probabilities: prediction.probabilities,
-        });
-      } else {
-        // If prediction fails, use default
-        setPredictionResult({
-          prediction: 0,
-          prediction_label: "CANDIDATE",
-          confidence: 0.5,
-          probabilities: {
-            CANDIDATE: 0.5,
-            CONFIRMED: 0.3,
-            "FALSE POSITIVE": 0.2
-          },
-        });
-      }
 
       setShowConfirmation(true);
 
@@ -803,18 +751,22 @@ export const ExoplanetDataEntry = ({ onSuccess }: ExoplanetDataEntryProps = {}) 
                       <div>
                         <p className="text-sm font-medium text-purple-300 mb-2">Probability Distribution:</p>
                         <div className="space-y-1 text-sm">
-                          <div className="flex justify-between">
-                            <span>Confirmed:</span>
-                            <span className="text-green-400">{(predictionResult.probabilities.CONFIRMED * 100).toFixed(1)}%</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Candidate:</span>
-                            <span className="text-yellow-400">{(predictionResult.probabilities.CANDIDATE * 100).toFixed(1)}%</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>False Positive:</span>
-                            <span className="text-red-400">{(predictionResult.probabilities["FALSE POSITIVE"] * 100).toFixed(1)}%</span>
-                          </div>
+                          {(() => {
+                            const labelMap: Record<string, { label: string; color: string }> = {
+                              "0": { label: "Confirmed",     color: "text-green-400"  },
+                              "1": { label: "Candidate",     color: "text-yellow-400" },
+                              "2": { label: "False Positive",color: "text-red-400"    },
+                            };
+                            return Object.entries(predictionResult.probabilities).map(([key, prob]) => {
+                              const mapped = labelMap[key] || { label: key, color: "text-gray-400" };
+                              return (
+                                <div key={key} className="flex justify-between">
+                                  <span>{mapped.label}:</span>
+                                  <span className={mapped.color}>{(prob * 100).toFixed(1)}%</span>
+                                </div>
+                              );
+                            });
+                          })()}
                         </div>
                       </div>
                     </div>

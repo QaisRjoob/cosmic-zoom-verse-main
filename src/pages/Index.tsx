@@ -22,10 +22,10 @@ const Index = () => {
     <>
       {!isLoaded && <LoadingScreen onComplete={() => setIsLoaded(true)} />}
       
-      <main className="w-full h-screen overflow-hidden">
+      <main className="relative w-full h-screen overflow-hidden">
         {/* Title with auto-hide animation */}
-        <div 
-          className={`absolute top-8 left-1/2 -translate-x-1/2 z-10 text-center transition-all duration-700 ${
+        <div
+          className={`absolute top-8 left-1/2 -translate-x-1/2 z-50 text-center transition-all duration-700 ${
             showTitle ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-8 pointer-events-none'
           }`}
         >
@@ -53,7 +53,7 @@ const Index = () => {
         {!showTitle && isLoaded && (
           <button
             onClick={() => setShowTitle(true)}
-            className="absolute top-6 left-1/2 -translate-x-1/2 z-10 group"
+            className="absolute top-6 left-1/2 -translate-x-1/2 z-50 group"
             title="Show title"
           >
             <div className="flex items-center gap-2 px-4 py-2 bg-background/20 backdrop-blur-sm border border-primary/30 rounded-full hover:bg-background/40 hover:border-primary/60 transition-all duration-300 hover:scale-105">
@@ -65,7 +65,7 @@ const Index = () => {
           </button>
         )}
         
-        {isLoaded && <SpaceJourney />}
+        {isLoaded && <SpaceJourney hideBoxes={showTitle} />}
       </main>
     </>
   );

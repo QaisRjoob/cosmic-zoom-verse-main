@@ -55,7 +55,7 @@ import { Button } from "./ui/button";
 
 export type ViewState = "earth" | "solar" | "galaxy" | "universe" | "exoplanet" | "planet-details" | "model-metrics";
 
-export const SpaceJourney = () => {
+export const SpaceJourney = ({ hideBoxes = false }: { hideBoxes?: boolean }) => {
   const [view, setView] = useState<ViewState>("galaxy");
   const [showUIElements, setShowUIElements] = useState(true);
   const [showNavigation, setShowNavigation] = useState(true);
@@ -71,10 +71,6 @@ export const SpaceJourney = () => {
         const health = await exoplanetAPI.healthCheck();
         if (health.status === "healthy" && health.model_loaded) {
           setApiStatus("connected");
-          toast({
-            title: "API Connected",
-            description: `Model loaded successfully (v${health.model_version})`,
-          });
         } else {
           setApiStatus("disconnected");
           toast({
@@ -227,13 +223,13 @@ export const SpaceJourney = () => {
         <>
           {view === "galaxy" && (
             <>
-              <Dashboard />
+              {!hideBoxes && <Dashboard />}
             </>
           )}
-          
+
           {view === "exoplanet" && (
             <>
-              <Dashboard />
+              {!hideBoxes && <Dashboard />}
               {/* Exoplanet Data Entry - With Tab Selector */}
               <div className="absolute bottom-32 left-0 right-0 z-20 h-[50vh]">
                 <div className="h-full overflow-y-auto px-8">
@@ -250,7 +246,7 @@ export const SpaceJourney = () => {
                       size="lg"
                     >
                       <Upload className="w-5 h-5" />
-                      Upload CSV File
+                      Upload CSV File from many planets
                     </Button>
                     
                     <Button
